@@ -52,3 +52,30 @@ spark.sql("""
    AND date LIKE '01010%' 
    AND delay > 0
  """).show()
+
+
+# Join departure delays data (foo) with airport info
+
+foo.join(airportsna, airportsna.IATA == foo.origin
+).select("City", "State", "date", "delay", "distance", "destination").show()
+
+# In SQL
+spark.sql("""
+ SELECT a.City, a.State, f.date, f.delay, f.distance, f.destination
+   FROM foo f
+   JOIN airports_na a
+     ON a.IATA = f.origin
+""").show()
+
+# Join departure delays data (foo) with airport info, using a full join
+foo.join(airportsna, airportsna.IATA == foo.origin, "full"
+).select("City", "State", "date", "delay", "distance", "destination").show()
+
+# In SQL
+spark.sql("""
+ SELECT a.City, a.State, f.date, f.delay, f.distance, f.destination
+    FROM foo f
+    FULL JOIN airports_na a
+      ON a.IATA = f.origin
+""").show()
+
