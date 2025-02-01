@@ -8,6 +8,8 @@ airportsna = (spark.read
 .format("csv")
 .options(header="true", inferSchema="true", sep="\t")
 .load(airportsnaFilePath))
+# Register the DataFrame as a temp View, only for this session
+# Optionally, you can create a global temp view for cross-session access: createGlobalTempView()
 airportsna.createOrReplaceTempView("airports_na")
 
 # Obtain departure delays data set
@@ -15,6 +17,7 @@ departureDelays = (spark.read
 .format("csv")
 .options(header="true")
 .load(tripdelaysFilePath))
+
 departureDelays = (departureDelays
 .withColumn("delay", expr("CAST(delay as INT) as delay"))
 .withColumn("distance", expr("CAST(distance as INT) as distance")))
@@ -24,6 +27,11 @@ departureDelays.createOrReplaceTempView("departureDelays")
 foo = (departureDelays
 .filter(expr("""origin == 'SEA' and destination == 'SFO' and date like '01010%' and delay > 0""")))
 foo.createOrReplaceTempView("foo")
+
+# Create a slighty bigger table
+fooBigger = (departureDelays
+.filter(expr("""date like '01010%'""")))
+fooBigger.createOrReplaceTempView("fooBigger")
 
 # DataFrame airports_na
 spark.sql("SELECT * FROM airports_na LIMIT 10").show()
@@ -53,29 +61,46 @@ spark.sql("""
    AND delay > 0
  """).show()
 
+#If we want to remove duplicates we can use dropDuplicates() or distinct()
+bar.filter(expr("""origin == 'SEA' AND destination == 'SFO' AND date LIKE '01010%' AND delay > 0""")).dropDuplicates().show()
 
-# Join departure delays data (foo) with airport info
 
-foo.join(airportsna, airportsna.IATA == foo.origin
-).select("City", "State", "date", "delay", "distance", "destination").show()
 
-# In SQL
-spark.sql("""
- SELECT a.City, a.State, f.date, f.delay, f.distance, f.destination
-   FROM foo f
-   JOIN airports_na a
-     ON a.IATA = f.origin
-""").show()
 
-# Join departure delays data (foo) with airport info, using a full join
-foo.join(airportsna, airportsna.IATA == foo.origin, "full"
-).select("City", "State", "date", "delay", "distance", "destination").show()
 
-# In SQL
-spark.sql("""
- SELECT a.City, a.State, f.date, f.delay, f.distance, f.destination
-    FROM foo f
-    FULL JOIN airports_na a
-      ON a.IATA = f.origin
-""").show()
 
+
+
+
+
+
+
+
+
+
+
+#________________________________________________________________________________________________________________________
+
+# What if the DataFrames have a different schema, we have to do some Modifications ?
+# Old Flights (without Airline column)
+oldFlights = spark.createDataFrame([
+    ("JFK", "LAX", "2023-12-31", 5),
+    ("ATL", "ORD", "2023-12-30", -2),
+    ("SFO", "SEA", "2023-12-29", 10)
+], ["origin", "destination", "date", "delay"])
+
+# New Flights (with Airline column)
+newFlights = spark.createDataFrame([
+    ("JFK", "LAX", "2024-01-01", 3, "American"),
+    ("ATL", "ORD", "2024-01-02", -1, "Delta"),
+    ("SFO", "SEA", "2024-01-03", 12, "United")
+], ["origin", "destination", "date", "delay", "airline"])
+
+# Add a new column for airline to the oldFlights DataFrame with a default value
+oldFlightsFormatted = oldFlights.selectExpr("origin", "destination", "date", "delay", "NULL as airline")
+newFlightsFormatted = newFlights.selectExpr("origin", "destination", "date", "delay", "airline")
+
+# Combine both DataFrames
+combinedFlights = oldFlightsFormatted.union(newFlightsFormatted)
+# Show the results
+combinedFlights.show()
